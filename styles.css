@@ -455,6 +455,39 @@ body {
     border-radius: 20px;
 }
 
+#word-notification {
+    position: absolute;
+    top: 150px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 32px;
+    font-weight: 900;
+    color: var(--neon-cyan);
+    text-shadow: 0 0 30px var(--neon-cyan);
+    padding: 20px 40px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 2px solid var(--neon-cyan);
+    border-radius: 16px;
+    animation: wordPopIn 0.4s ease-out;
+    z-index: 100;
+}
+
+@keyframes wordPopIn {
+    0% {
+        transform: translateX(-50%) scale(0.5);
+        opacity: 0;
+    }
+    50% {
+        transform: translateX(-50%) scale(1.1);
+    }
+    100% {
+        transform: translateX(-50%) scale(1);
+        opacity: 1;
+    }
+}
+
 #health-bar {
     position: absolute;
     bottom: 40px;
@@ -540,42 +573,83 @@ body {
 /* Contrôles mobile */
 #controls {
     position: fixed;
-    bottom: 20px;
+    bottom: 0;
+    left: 0;
     width: 100%;
+    height: 220px;
     display: none;
     pointer-events: none;
+    z-index: 50;
 }
 
-#joystick-area {
+#mobile-buttons {
     position: absolute;
-    left: 20px;
-    bottom: 0;
-    width: 120px;
-    height: 120px;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 15px;
+    align-items: flex-end;
     pointer-events: auto;
 }
 
-#joystick-base {
-    width: 100%;
-    height: 100%;
-    background: var(--glass-bg);
-    backdrop-filter: blur(10px);
-    border: 2px solid var(--glass-border);
-    border-radius: 50%;
-    position: relative;
+.button-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
-#joystick-stick {
-    width: 50px;
-    height: 50px;
-    background: linear-gradient(135deg, var(--neon-cyan), var(--neon-purple));
+.left-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.center-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.right-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.direction-btn {
+    width: 65px;
+    height: 65px;
     border-radius: 50%;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    box-shadow: 0 4px 20px rgba(0, 255, 255, 0.5);
+    border: 3px solid var(--glass-border);
+    background: var(--glass-bg);
+    backdrop-filter: blur(10px);
+    color: var(--neon-cyan);
+    font-size: 28px;
+    font-weight: 900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
     transition: all 0.1s ease;
+    box-shadow: 0 4px 20px rgba(0, 255, 255, 0.3);
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+}
+
+.direction-btn:active {
+    transform: scale(0.9);
+    background: rgba(0, 255, 255, 0.2);
+    border-color: var(--neon-cyan);
+    box-shadow: 0 0 30px rgba(0, 255, 255, 0.6);
+}
+
+.direction-btn[data-direction="up"],
+.direction-btn[data-direction="down"] {
+    width: 70px;
+    height: 70px;
+    font-size: 32px;
 }
 
 /* Écran de fin */

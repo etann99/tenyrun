@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Teny Run - Galaksia Teny Gasy</title>
+    <title>Lomay - Galaksia Teny Gasy</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -11,7 +11,7 @@
     
     <!-- Menu principal -->
     <div id="main-menu" class="glass-panel">
-        <h1>TENY RUN</h1>
+        <h1>LOMAY</h1>
         <p class="subtitle">Galaksia Teny Gasy</p>
         
         <div class="main-menu-buttons">
@@ -61,7 +61,7 @@
         <div class="tutorial-content">
             <div class="tutorial-section">
                 <h3>🎯 Tanjona</h3>
-                <p>Angòny ny teny malagasy 10 talohan'ny hahavitan'ny kintana ny supernova! Misy segondra 75 ianao ary +5 segondra isaky ny teny voaangòna.</p>
+                <p>Angòny ny teny malagasy 10 talohan'ny hahavitan'ny kintana ny supernova! Misy segondra 75 ianao.</p>
             </div>
             
             <div class="tutorial-section">
@@ -76,14 +76,14 @@
                 </ul>
                 <p><strong>Finday:</strong></p>
                 <ul>
-                    <li><strong>Joystick</strong> - Mifehy ny sambo</li>
+                    <li><strong>Joystick</strong> - Mifehy ny sambondanitra</li>
                     <li><strong>Rantsantanana 2</strong> - Mitodika ny fijery</li>
                 </ul>
             </div>
             
             <div class="tutorial-section">
                 <h3>⚠️ Loza</h3>
-                <p><strong>Vatolampy:</strong> Fandresahana manala paika 10. Raha 0 ny paika dia tapitra!</p>
+                <p><strong>Vatolampy:</strong> Fandresahana mahavery fahasalamana 10%. Raha 0% dia tapitra!</p>
                 <p><strong>Kintana:</strong> Ny kintana ao afovoan'ny sehatra! Ny fikasihana azy dia fahafatesana avy hatrany! Fadio ny faritra mena.</p>
             </div>
             
@@ -92,7 +92,7 @@
                 <ul>
                     <li>★ - Nahavita ny teny 10 rehetra</li>
                     <li>★★ - Nahavita latsaky ny 60 segondra</li>
-                    <li>★★★ - Paika mihoatra ny 50% taorian'ny lalao</li>
+                    <li>★★★ - Fahasalamana mihoatra ny 50% taorian'ny lalao</li>
                 </ul>
             </div>
             
@@ -129,6 +129,11 @@
             <div id="health-fill"></div>
         </div>
         
+        <!-- Notification mot collecté -->
+        <div id="word-notification" class="hidden">
+            <span id="word-notification-text"></span>
+        </div>
+        
         <!-- Boutons de contrôle en jeu -->
         <div class="game-controls">
             <button id="pause-btn" class="control-btn">⏸</button>
@@ -146,9 +151,21 @@
     
     <!-- Contrôles mobile -->
     <div id="controls">
-        <div id="joystick-area">
-            <div id="joystick-base">
-                <div id="joystick-stick"></div>
+        <div id="mobile-buttons">
+            <!-- Boutons directionnels -->
+            <div class="button-group left-group">
+                <button class="direction-btn" data-direction="left">←</button>
+                <button class="direction-btn" data-direction="right">→</button>
+            </div>
+            
+            <div class="button-group center-group">
+                <button class="direction-btn" data-direction="up">↑</button>
+                <button class="direction-btn" data-direction="down">↓</button>
+            </div>
+            
+            <div class="button-group right-group">
+                <button class="direction-btn" data-direction="forward">⬆</button>
+                <button class="direction-btn" data-direction="backward">⬇</button>
             </div>
         </div>
     </div>
@@ -159,7 +176,7 @@
         <div class="stars-display" id="stars-earned">★★★</div>
         <div class="stats">
             <div>Fotoana: <span id="final-time">45.2s</span></div>
-            <div>Paika: <span id="final-health">70%</span></div>
+            <div>Fahasalamana: <span id="final-health">70%</span></div>
             <div>Fandresahana: <span id="final-collisions">0</span></div>
         </div>
         <div id="new-words-unlocked" class="new-words hidden">
@@ -170,8 +187,8 @@
     </div>
     
     <div id="instructions">
-        Finday: Joystick + Rantsantanana 2 (mitodika)<br>
-        Desktop: Z/S (↕) • ←→ (havia/havanana) • ↑↓ (mandroso/mihemotra) • Totozy (mitodika 360°)
+        <strong>Finday:</strong> 6 Bokotra (havia/havanana/miakatra/midina/mandroso/mihemotra) + Mikasika efijery (mitodika 360°)<br>
+        <strong>Desktop:</strong> Z/S (↕) • ←→ (havia/havanana) • ↑↓ (mandroso/mihemotra) • Totozy (mitodika 360°)
     </div>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>

@@ -13,14 +13,25 @@ let consecutiveCollections = 0;
 let slowMotionActive = false;
 
 // Contrôles
-let joystickActive = false;
-let joystickVector = { x: 0, y: 0 };
+let buttonStates = {
+    forward: false,
+    backward: false,
+    left: false,
+    right: false,
+    up: false,
+    down: false
+};
+
 let shipVelocity = new THREE.Vector3();
 const keysPressed = {};
 
-// Contrôle caméra souris
-let mouseDown = false;
+// Contrôle caméra tactile
+let touchStartPos = null;
+let isTouchingForCamera = false;
 let cameraRotation = { horizontal: 0, vertical: 0.3 };
+
+// Support souris pour desktop
+let mouseDown = false;
 let lastMousePos = { x: 0, y: 0 };
 
 // Progression
@@ -34,7 +45,7 @@ let progressData = {
 
 // ============ GESTION PROGRESSION ============
 function loadProgress() {
-    const saved = localStorage.getItem('tenyrun_progress');
+    const saved = localStorage.getItem('lomay_progress');
     if (saved) {
         progressData = JSON.parse(saved);
         updateStarsDisplay();
@@ -42,7 +53,7 @@ function loadProgress() {
 }
 
 function saveProgress() {
-    localStorage.setItem('tenyrun_progress', JSON.stringify(progressData));
+    localStorage.setItem('lomay_progress', JSON.stringify(progressData));
 }
 
 function updateStarsDisplay() {
@@ -261,30 +272,58 @@ function createStarfield() {
 function createShip() {
     const shipGroup = new THREE.Group();
     
-    // Corps principal (pyramide)
-    const bodyGeometry = new THREE.ConeGeometry(0.5, 2, 4);
+    // Corps principal (cône avec pointe à l'avant, base à l'arrière)
+    const bodyGeometry = new THREE.ConeGeometry(0.6, 3, 6);
     const bodyMaterial = new THREE.MeshPhongMaterial({ 
         color: 0x00ffff,
         emissive: 0x00ffff,
-        emissiveIntensity: 0.5,
-        shininess: 100
+        emissiveIntensity: 0.4,
+        shininess: 100,
+        flatShading: true
     });
     const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-    body.rotation.x = Math.PI;
+    body.rotation.x = Math.PI / 2; // Pointe vers l'avant (-Z)
     shipGroup.add(body);
     
-    // Ailes
-    const wingGeometry = new THREE.BoxGeometry(2, 0.1, 0.5);
+    // Cockpit (sphère à la pointe avant)
+    const cockpitGeometry = new THREE.SphereGeometry(0.4, 16, 16);
+    const cockpitMaterial = new THREE.MeshPhongMaterial({ 
+        color: 0x8b5cf6,
+        emissive: 0x8b5cf6,
+        emissiveIntensity: 0.6,
+        transparent: true,
+        opacity: 0.8
+    });
+    const cockpit = new THREE.Mesh(cockpitGeometry, cockpitMaterial);
+    cockpit.position.z = -1.7; // Pointe avant
+    shipGroup.add(cockpit);
+    
+    // Ailes principales (triangulaires)
+    const wingGeometry = new THREE.BufferGeometry();
+    const wingVertices = new Float32Array([
+        // Triangle gauche
+        -2, 0, 0,
+        -0.3, 0, -0.5,
+        -0.3, 0, 0.5,
+        // Triangle droit
+        2, 0, 0,
+        0.3, 0, 0.5,
+        0.3, 0, -0.5
+    ]);
+    wingGeometry.setAttribute('position', new THREE.BufferAttribute(wingVertices, 3));
+    wingGeometry.computeVertexNormals();
+    
     const wingMaterial = new THREE.MeshPhongMaterial({ 
         color: 0x8b5cf6,
         emissive: 0x8b5cf6,
-        emissiveIntensity: 0.3
+        emissiveIntensity: 0.2,
+        side: THREE.DoubleSide,
+        flatShading: true
     });
-    const wing = new THREE.Mesh(wingGeometry, wingMaterial);
-    wing.position.y = -0.3;
-    shipGroup.add(wing);
+    const wings = new THREE.Mesh(wingGeometry, wingMaterial);
+    shipGroup.add(wings);
     
-    shipGroup.position.set(0, 0, 0);
+    shipGroup.position.set(25, 10, 25);
     ship = shipGroup;
     scene.add(ship);
 }
@@ -505,6 +544,9 @@ function startGame(systemKey) {
     consecutiveCollections = 0;
     slowMotionActive = false;
     
+    // Nettoyer tous les résidus (supernova, particules, etc.)
+    cleanupScene();
+    
     // Reset vaisseau (spawn loin du soleil central)
     ship.position.set(25, 10, 25);
     shipVelocity.set(0, 0, 0);
@@ -516,6 +558,8 @@ function startGame(systemKey) {
     sun.material.color.setHex(systemData.color);
     sun.children[0].material.color.setHex(systemData.color);
     sun.children[1].material.color.setHex(systemData.color);
+    sun.scale.set(1, 1, 1);
+    sun.material.opacity = 0.8;
     
     // Générer niveau
     createAsteroids();
@@ -540,12 +584,53 @@ function startGame(systemKey) {
     }, 100);
 }
 
+function cleanupScene() {
+    // Supprimer tous les objets qui ne sont pas essentiels (particules, débris, etc.)
+    const objectsToRemove = [];
+    scene.traverse((object) => {
+        // Garder seulement: caméra, lumières, soleil, vaisseau, étoiles de fond
+        if (object instanceof THREE.Mesh && 
+            object !== ship && 
+            !ship.children.includes(object) &&
+            object !== sun && 
+            !sun.children.includes(object) &&
+            !(object.material && object.material instanceof THREE.PointsMaterial)) {
+            // C'est probablement un débris/particule
+            if (object.geometry.type === 'SphereGeometry' && object.geometry.parameters.radius < 1) {
+                objectsToRemove.push(object);
+            }
+        }
+    });
+    
+    objectsToRemove.forEach(obj => {
+        scene.remove(obj);
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) obj.material.dispose();
+    });
+}
+
 function endGame(success) {
+    // Empêcher double appel (victoire + supernova simultanés)
+    if (gameState === 'gameover') return;
+    
     gameState = 'gameover';
     clearInterval(gameTimer);
     
     const finalTime = ((Date.now() - startTime) / 1000).toFixed(1);
     
+    // Animation supernova si échec par temps écoulé (et pas de victoire simultanée)
+    if (!success && health > 0) {
+        triggerSupernova();
+        // Attendre la fin de l'animation avant d'afficher le game over
+        setTimeout(() => {
+            showGameOverScreen(success, finalTime);
+        }, 3000);
+    } else {
+        showGameOverScreen(success, finalTime);
+    }
+}
+
+function showGameOverScreen(success, finalTime) {
     // Calculer étoiles
     let stars = 0;
     if (success) {
@@ -580,7 +665,7 @@ function endGame(success) {
             newWordsDiv.classList.remove('hidden');
         }
     } else {
-        title.textContent = health <= 0 ? 'Simba ny Sambo!' : 'Supernova!';
+        title.textContent = health <= 0 ? 'Simba ny Sambondanitra!' : 'Supernova!';
         gameOverDiv.classList.remove('success');
         gameOverDiv.classList.add('failure');
         newWordsDiv.classList.add('hidden');
@@ -594,6 +679,117 @@ function endGame(success) {
     gameOverDiv.style.display = 'block';
     document.getElementById('game-hud').style.display = 'none';
     document.getElementById('controls').style.display = 'none';
+}
+
+function triggerSupernova() {
+    // Animation explosive du soleil
+    const explosionDuration = 3000; // 3 secondes
+    const explosionStartTime = Date.now();
+    
+    // Créer particules d'explosion
+    const particleCount = 200;
+    const explosionParticles = [];
+    
+    for (let i = 0; i < particleCount; i++) {
+        const geometry = new THREE.SphereGeometry(0.3 + Math.random() * 0.5, 8, 8);
+        const color = Math.random() > 0.5 ? 0xff6b00 : 0xff0000;
+        const material = new THREE.MeshBasicMaterial({ 
+            color: color,
+            transparent: true,
+            opacity: 1
+        });
+        const particle = new THREE.Mesh(geometry, material);
+        particle.position.copy(sun.position);
+        
+        // Direction aléatoire
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.random() * Math.PI;
+        const velocity = new THREE.Vector3(
+            Math.sin(phi) * Math.cos(theta),
+            Math.sin(phi) * Math.sin(theta),
+            Math.cos(phi)
+        ).multiplyScalar(0.5 + Math.random() * 1);
+        
+        scene.add(particle);
+        explosionParticles.push({ 
+            mesh: particle, 
+            velocity,
+            life: 1,
+            initialSize: particle.geometry.parameters.radius
+        });
+    }
+    
+    // Sauvegarder l'état initial du soleil
+    const initialSunScale = sun.scale.clone();
+    const initialSunColor = sun.material.color.clone();
+    const initialSunOpacity = sun.material.opacity;
+    
+    // Animation de l'explosion
+    function animateExplosion() {
+        const elapsed = Date.now() - explosionStartTime;
+        const progress = elapsed / explosionDuration;
+        
+        // Continuer seulement si toujours en gameover (pas de victoire entretemps)
+        if (progress < 1 && gameState === 'gameover') {
+            // Grossissement du soleil
+            const scale = 1 + progress * 15;
+            sun.scale.set(scale, scale, scale);
+            
+            // Changement de couleur rouge -> blanc
+            const colorValue = Math.floor(255 * (1 - progress * 0.5));
+            sun.material.color.setRGB(1, colorValue / 255, colorValue / 255);
+            sun.material.opacity = 1 - progress * 0.3;
+            
+            // Flash intense à mi-parcours
+            if (progress > 0.4 && progress < 0.6) {
+                sun.material.emissive.setRGB(1, 1, 1);
+                sun.material.emissiveIntensity = 3;
+            }
+            
+            // Animation particules
+            explosionParticles.forEach((p, i) => {
+                // Accélération exponentielle
+                const speed = 1 + progress * 3;
+                p.mesh.position.add(p.velocity.clone().multiplyScalar(speed));
+                
+                // Fade out progressif
+                p.life = 1 - progress;
+                p.mesh.material.opacity = p.life;
+                
+                // Grossissement des particules
+                const particleScale = 1 + progress * 2;
+                p.mesh.scale.set(particleScale, particleScale, particleScale);
+                
+                if (p.life <= 0) {
+                    scene.remove(p.mesh);
+                    if (p.mesh.geometry) p.mesh.geometry.dispose();
+                    if (p.mesh.material) p.mesh.material.dispose();
+                    explosionParticles.splice(i, 1);
+                }
+            });
+            
+            // Secouer la caméra
+            camera.position.x += (Math.random() - 0.5) * progress * 2;
+            camera.position.y += (Math.random() - 0.5) * progress * 2;
+            
+            requestAnimationFrame(animateExplosion);
+        } else {
+            // Nettoyer et restaurer
+            explosionParticles.forEach(p => {
+                scene.remove(p.mesh);
+                if (p.mesh.geometry) p.mesh.geometry.dispose();
+                if (p.mesh.material) p.mesh.material.dispose();
+            });
+            explosionParticles.length = 0;
+            
+            // Restaurer le soleil
+            sun.scale.copy(initialSunScale);
+            sun.material.color.copy(initialSunColor);
+            sun.material.opacity = initialSunOpacity;
+        }
+    }
+    
+    animateExplosion();
 }
 
 function updateHUD() {
@@ -625,49 +821,90 @@ function updateHUD() {
 
 // ============ CONTRÔLES ============
 function setupControls() {
-    const joystickArea = document.getElementById('joystick-area');
-    const joystickStick = document.getElementById('joystick-stick');
-    
-    // Joystick
-    joystickArea.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        joystickActive = true;
-        updateJoystick(e.touches[0]);
+    // Boutons tactiles - 6 directions
+    document.querySelectorAll('.direction-btn').forEach(btn => {
+        const direction = btn.dataset.direction;
+        
+        btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            buttonStates[direction] = true;
+        });
+        
+        btn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            buttonStates[direction] = false;
+        });
+        
+        btn.addEventListener('touchcancel', (e) => {
+            e.preventDefault();
+            buttonStates[direction] = false;
+        });
+        
+        // Support souris pour tests desktop
+        btn.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            buttonStates[direction] = true;
+        });
+        
+        btn.addEventListener('mouseup', (e) => {
+            e.preventDefault();
+            buttonStates[direction] = false;
+        });
+        
+        btn.addEventListener('mouseleave', (e) => {
+            buttonStates[direction] = false;
+        });
     });
     
-    joystickArea.addEventListener('touchmove', (e) => {
-        e.preventDefault();
-        if (joystickActive) {
-            updateJoystick(e.touches[0]);
+    // Touch sur l'écran pour rotation caméra
+    const canvas = renderer.domElement;
+    
+    canvas.addEventListener('touchstart', (e) => {
+        if (gameState !== 'playing') return;
+        
+        // Ignorer si touche un bouton (zone basse de l'écran)
+        const touch = e.touches[0];
+        if (touch.clientY > window.innerHeight - 240) return;
+        
+        isTouchingForCamera = true;
+        touchStartPos = { x: touch.clientX, y: touch.clientY };
+    });
+    
+    canvas.addEventListener('touchmove', (e) => {
+        if (!isTouchingForCamera || gameState !== 'playing') return;
+        
+        const touch = e.touches[0];
+        
+        // Ignorer si dans la zone des boutons
+        if (touch.clientY > window.innerHeight - 240) {
+            isTouchingForCamera = false;
+            return;
         }
-    });
-    
-    joystickArea.addEventListener('touchend', (e) => {
+        
+        const deltaX = touch.clientX - touchStartPos.x;
+        const deltaY = touch.clientY - touchStartPos.y;
+        
+        cameraRotation.horizontal -= deltaX * GAME_DATA.settings.camera.mouseSensitivity;
+        cameraRotation.vertical -= deltaY * GAME_DATA.settings.camera.mouseSensitivity;
+        
+        cameraRotation.vertical = Math.max(
+            GAME_DATA.settings.camera.minVertical,
+            Math.min(GAME_DATA.settings.camera.maxVertical, cameraRotation.vertical)
+        );
+        
+        touchStartPos = { x: touch.clientX, y: touch.clientY };
         e.preventDefault();
-        joystickActive = false;
-        joystickVector = { x: 0, y: 0 };
-        joystickStick.style.transform = 'translate(-50%, -50%)';
     });
     
-    function updateJoystick(touch) {
-        const rect = joystickArea.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-        
-        const deltaX = touch.clientX - centerX;
-        const deltaY = touch.clientY - centerY;
-        
-        const distance = Math.min(Math.sqrt(deltaX * deltaX + deltaY * deltaY), 35);
-        const angle = Math.atan2(deltaY, deltaX);
-        
-        const stickX = Math.cos(angle) * distance;
-        const stickY = Math.sin(angle) * distance;
-        
-        joystickStick.style.transform = `translate(calc(-50% + ${stickX}px), calc(-50% + ${stickY}px))`;
-        
-        joystickVector.x = deltaX / 35;
-        joystickVector.y = -deltaY / 35;
-    }
+    canvas.addEventListener('touchend', () => {
+        isTouchingForCamera = false;
+        touchStartPos = null;
+    });
+    
+    canvas.addEventListener('touchcancel', () => {
+        isTouchingForCamera = false;
+        touchStartPos = null;
+    });
 }
 
 // Pause/Resume
@@ -728,7 +965,10 @@ window.addEventListener('keyup', (e) => {
     keysPressed[e.key] = false;
 });
 
-// Souris - rotation de caméra
+// Souris - rotation de caméra (mouvement sans clic + molette)
+let lastMouseMovePos = { x: 0, y: 0 };
+let mouseMoveThrottle = 0;
+
 window.addEventListener('mousedown', (e) => {
     if (gameState === 'playing' && e.button === 0) {
         mouseDown = true;
@@ -737,7 +977,10 @@ window.addEventListener('mousedown', (e) => {
 });
 
 window.addEventListener('mousemove', (e) => {
-    if (mouseDown && gameState === 'playing') {
+    if (gameState !== 'playing') return;
+    
+    // Rotation avec clic maintenu (plus sensible)
+    if (mouseDown) {
         const deltaX = e.clientX - lastMousePos.x;
         const deltaY = e.clientY - lastMousePos.y;
         
@@ -750,53 +993,31 @@ window.addEventListener('mousemove', (e) => {
         );
         
         lastMousePos = { x: e.clientX, y: e.clientY };
+    } 
+    // Rotation au simple mouvement (moins sensible, throttled)
+    else {
+        const now = Date.now();
+        if (now - mouseMoveThrottle > 50) { // Throttle à 20fps
+            const deltaX = e.clientX - lastMouseMovePos.x;
+            const deltaY = e.clientY - lastMouseMovePos.y;
+            
+            // Sensibilité réduite pour mouvement simple
+            cameraRotation.horizontal -= deltaX * GAME_DATA.settings.camera.mouseSensitivity * 0.3;
+            cameraRotation.vertical -= deltaY * GAME_DATA.settings.camera.mouseSensitivity * 0.3;
+            
+            cameraRotation.vertical = Math.max(
+                GAME_DATA.settings.camera.minVertical,
+                Math.min(GAME_DATA.settings.camera.maxVertical, cameraRotation.vertical)
+            );
+            
+            lastMouseMovePos = { x: e.clientX, y: e.clientY };
+            mouseMoveThrottle = now;
+        }
     }
 });
 
 window.addEventListener('mouseup', () => {
     mouseDown = false;
-});
-
-// Touch pour mobile (rotation caméra avec 2 doigts)
-let touchRotating = false;
-let lastTouchPos = { x: 0, y: 0 };
-
-window.addEventListener('touchstart', (e) => {
-    if (gameState === 'playing' && e.touches.length === 2) {
-        touchRotating = true;
-        lastTouchPos = { 
-            x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
-            y: (e.touches[0].clientY + e.touches[1].clientY) / 2
-        };
-    }
-});
-
-window.addEventListener('touchmove', (e) => {
-    if (touchRotating && gameState === 'playing' && e.touches.length === 2) {
-        const currentTouchPos = { 
-            x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
-            y: (e.touches[0].clientY + e.touches[1].clientY) / 2
-        };
-        
-        const deltaX = currentTouchPos.x - lastTouchPos.x;
-        const deltaY = currentTouchPos.y - lastTouchPos.y;
-        
-        cameraRotation.horizontal -= deltaX * GAME_DATA.settings.camera.mouseSensitivity;
-        cameraRotation.vertical -= deltaY * GAME_DATA.settings.camera.mouseSensitivity;
-        
-        cameraRotation.vertical = Math.max(
-            GAME_DATA.settings.camera.minVertical,
-            Math.min(GAME_DATA.settings.camera.maxVertical, cameraRotation.vertical)
-        );
-        
-        lastTouchPos = currentTouchPos;
-    }
-});
-
-window.addEventListener('touchend', (e) => {
-    if (e.touches.length < 2) {
-        touchRotating = false;
-    }
 });
 
 // ============ GAME LOOP ============
@@ -819,10 +1040,19 @@ function animate() {
         if (keysPressed['z'] || keysPressed['Z']) keyboardInput.up = 1;
         if (keysPressed['s'] || keysPressed['S']) keyboardInput.up = -1;
         
-        // Joystick contrôle right et up
-        const inputForward = keyboardInput.forward;
-        const inputRight = joystickVector.x || keyboardInput.right;
-        const inputUp = joystickVector.y || keyboardInput.up;
+        // Boutons tactiles - 6 directions
+        const touchInput = { forward: 0, right: 0, up: 0 };
+        if (buttonStates.forward) touchInput.forward = 1;
+        if (buttonStates.backward) touchInput.forward = -1;
+        if (buttonStates.left) touchInput.right = -1;
+        if (buttonStates.right) touchInput.right = 1;
+        if (buttonStates.up) touchInput.up = 1;
+        if (buttonStates.down) touchInput.up = -1;
+        
+        // Combiner clavier et boutons tactiles
+        const inputForward = keyboardInput.forward || touchInput.forward;
+        const inputRight = keyboardInput.right || touchInput.right;
+        const inputUp = keyboardInput.up || touchInput.up;
         
         // Calculer direction du vaisseau basée sur la rotation de la caméra
         const shipForward = new THREE.Vector3(
@@ -945,8 +1175,10 @@ function animate() {
                 ship.children[0].material.emissiveIntensity = 1;
                 
                 setTimeout(() => {
-                    ship.children[0].material.emissive.setHex(0x00ffff);
-                    ship.children[0].material.emissiveIntensity = 0.5;
+                    if (ship && ship.children[0]) {
+                        ship.children[0].material.emissive.setHex(0x00ffff);
+                        ship.children[0].material.emissiveIntensity = 0.4;
+                    }
                 }, 200);
             }
         });
@@ -1001,8 +1233,8 @@ function collectWord(word) {
     wordsCollected++;
     consecutiveCollections++;
     
-    // Bonus temps
-    timeLeft += GAME_DATA.settings.gameplay.timeBonus;
+    // Afficher notification du mot
+    showWordNotification(word.word);
     
     // Slow motion après 3 collections consécutives
     if (consecutiveCollections >= GAME_DATA.settings.gameplay.slowMotionThreshold) {
@@ -1023,6 +1255,19 @@ function collectWord(word) {
     if (wordsCollected >= GAME_DATA.settings.gameplay.wordsPerLevel) {
         setTimeout(() => endGame(true), 500);
     }
+}
+
+function showWordNotification(wordText) {
+    const notification = document.getElementById('word-notification');
+    const textSpan = document.getElementById('word-notification-text');
+    
+    textSpan.textContent = wordText;
+    notification.classList.remove('hidden');
+    
+    // Cacher après 2 secondes
+    setTimeout(() => {
+        notification.classList.add('hidden');
+    }, 2000);
 }
 
 function createParticles(position) {
